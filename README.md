@@ -37,6 +37,7 @@ Este projeto converte dados de vias entre bairros de Recife (arquivo Excel) em u
 - openpyxl
 - networkx
 - pyvis (para visualização HTML interativa)
+- streamlit (para app interativo com algoritmos)
 
 ### Instalação
 
@@ -52,6 +53,8 @@ pip install -r requirements.txt
 ```
 
 ### Executar
+
+**1. Gerar dados do grafo (criar_multigrafo_recife.py):**
 
 ```bash
 # Básico: apenas gerar CSVs e GEXF
@@ -69,6 +72,18 @@ python criar_multigrafo_recife.py --viz --serve
 # Customizar porta do servidor
 python criar_multigrafo_recife.py --viz --serve --port 8080
 ```
+
+**2. App Streamlit interativo (app.py):**
+
+```bash
+streamlit run app.py
+```
+
+O app oferece:
+- Visualização interativa do grafo
+- Dijkstra: caminho mais curto entre dois bairros
+- Kruskal: árvore geradora mínima (AGM)
+- Algoritmos implementados conforme slides das aulas (sem usar funções prontas)
 
 ## Visualização
 
@@ -133,11 +148,30 @@ Esperado um arquivo Excel com as seguintes colunas:
 - Preserva NaN em pesos (com fallback weight=1.0)
 - Lança erro se vértices vazios
 
+## Algoritmos Implementados
+
+### Dijkstra (Caminho Mais Curto)
+Implementação conforme **AULA 05 - CAMINHOS MAIS CURTO_DIJKSTRA**:
+- Vetores: `d[v]` (distância estimada), `p[v]` (predecessor), `aberto[v]` (boolean)
+- Inicialização: `d[s]=0`, `d[v]=∞` para v≠s
+- Loop principal com relaxamento de arestas
+- Fila de prioridade (heap) para eficiência
+- Reconstrução do caminho via predecessores
+
+### Kruskal (Árvore Geradora Mínima)
+Implementação conforme **AULA 11 e 12 - AMG/KRUSKAL**:
+- Union-Find com path compression e union by rank
+- Ordena arestas por peso crescente
+- Processa arestas evitando ciclos
+- AGM final tem |V|-1 arestas
+- Algoritmo guloso formando floresta → árvore
+
 ## Notas sobre Implementação
 
 - **Cálculo de graus:** usa pandas (não networkx) conforme regras do projeto
 - **Visualização:** usa PyVis (não usa algoritmos prontos de libs externas)
 - **Multigrafo:** preserva todas as arestas paralelas e auto-laços
+- **Algoritmos:** Dijkstra e Kruskal implementados do zero (sem `nx.shortest_path` ou `nx.minimum_spanning_tree`)
 
 ## Autor
 
