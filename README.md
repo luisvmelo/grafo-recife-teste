@@ -79,11 +79,22 @@ python criar_multigrafo_recife.py --viz --serve --port 8080
 streamlit run app.py
 ```
 
-O app oferece:
-- Visualização interativa do grafo
-- Dijkstra: caminho mais curto entre dois bairros
-- Kruskal: árvore geradora mínima (AGM)
-- Algoritmos implementados conforme slides das aulas (sem usar funções prontas)
+**Interface minimalista:**
+- Canvas grande (1000px) com grafo completo sempre visível
+- Sidebar única com: Bairro 1, Bairro 2, Método de travessia
+- Hover em aresta: tooltip com nome, peso, endpoints e graus
+- Hover em nó: destaca vizinhos e arestas automaticamente
+
+**Métodos disponíveis:**
+1. **Dijkstra (menor caminho):** entre dois bairros, destaque em vermelho
+2. **Árvores de travessia (BFS/DFS):** a partir de um bairro raiz
+3. **Ranking por grau:** visualização com gradiente de cor e tamanho
+
+**Visual:**
+- Base: 904 arestas visíveis (cinza, sem label), 88 nós com nomes sempre visíveis
+- Multiarestas curvadas (sem sobreposição)
+- Repulsão forte para legibilidade sem zoom
+- Algoritmos implementados manualmente (sem usar funções prontas)
 
 ## Visualização
 
@@ -165,6 +176,27 @@ Implementação conforme **AULA 11 e 12 - AMG/KRUSKAL**:
 - Processa arestas evitando ciclos
 - AGM final tem |V|-1 arestas
 - Algoritmo guloso formando floresta → árvore
+
+### BFS (Busca em Largura)
+Implementação manual para árvore de travessia:
+- Fila (FIFO) para processar vértices
+- Marca visitados para evitar ciclos
+- Retorna ordem de visita e arestas da árvore
+- Usa apenas Bairro 1 como raiz
+
+### DFS (Busca em Profundidade)
+Implementação manual recursiva:
+- Pilha implícita (recursão)
+- Marca visitados durante travessia
+- Retorna ordem de visita e arestas da árvore
+- Usa apenas Bairro 1 como raiz
+
+### Ranking por Grau
+Análise de centralidade simples:
+- Calcula grau de cada vértice via contagem em edges.csv
+- Ordena bairros por número de conexões
+- Visualização com gradiente de cor (azul claro → escuro)
+- Tamanho dos nós proporcional ao grau
 
 ## Notas sobre Implementação
 
