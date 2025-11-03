@@ -10,6 +10,7 @@ import pandas as pd
 import os
 from collections import defaultdict
 import heapq
+import json
 
 try:
     from pyvis.network import Network
@@ -242,38 +243,36 @@ def criar_grafo_visual(df_edges, nodes, degree, resultado=None, metodo=None):
     net = Network(height="1000px", width="100%", directed=False, bgcolor="#ffffff")
 
     # Opções conforme especificação (physics.enabled = false)
-    net.set_options("""
-var options = {
-  layout: { improvedLayout: true },
-  nodes: {
-    shape: 'dot',
-    size: 12,
-    font: { face: 'Arial', size: 20, bold: false, vadjust: 0 },
-    scaling: { min: 20, max: 20, label: { enabled: true, min: 20, max: 20 } },
-    labelHighlightBold: false
-  },
-  edges: {
-    smooth: false,
-    color: { color:'#94a3b8', opacity:0.45 },
-    width: 1.2
-  },
-  physics: {
-    enabled: false,
-    solver: 'repulsion',
-    repulsion: { nodeDistance: 340, springLength: 320 },
-    stabilization: { iterations: 450 }
-  },
-  interaction: {
-    hover: true,
-    hoverConnectedEdges: true,
-    selectConnectedEdges: true,
-    zoomView: true,
-    navigationButtons: true,
-    keyboard: true,
-    tooltipDelay: 60
-  }
-}
-""")
+    net.set_options(json.dumps({
+        "layout": { "improvedLayout": True },
+        "nodes": {
+            "shape": "dot",
+            "size": 12,
+            "font": { "face": "Arial", "size": 20, "bold": False, "vadjust": 0 },
+            "scaling": { "min": 20, "max": 20, "label": { "enabled": True, "min": 20, "max": 20 } },
+            "labelHighlightBold": False
+        },
+        "edges": {
+            "smooth": False,
+            "color": { "color": "#94a3b8", "opacity": 0.45 },
+            "width": 1.2
+        },
+        "physics": {
+            "enabled": False,
+            "solver": "repulsion",
+            "repulsion": { "nodeDistance": 340, "springLength": 320 },
+            "stabilization": { "iterations": 450 }
+        },
+        "interaction": {
+            "hover": True,
+            "hoverConnectedEdges": True,
+            "selectConnectedEdges": True,
+            "zoomView": True,
+            "navigationButtons": True,
+            "keyboard": True,
+            "tooltipDelay": 60
+        }
+    }))
 
     # Preparar conjunto de arestas destacadas
     arestas_destaque = set()
