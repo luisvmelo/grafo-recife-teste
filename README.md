@@ -27,6 +27,7 @@ Este projeto converte dados de vias entre bairros de Recife (arquivo Excel) em u
 - **edges.csv**: lista de todas as arestas com atributos
 - **nodes.csv**: lista de nós com grau
 - **grafo_recife.gexf**: formato GEXF para importar no Gephi
+- **grafo_interativo.html**: visualização HTML interativa (gerado com `--viz`)
 
 ## Uso
 
@@ -35,6 +36,7 @@ Este projeto converte dados de vias entre bairros de Recife (arquivo Excel) em u
 - pandas
 - openpyxl
 - networkx
+- pyvis (para visualização HTML interativa)
 
 ### Instalação
 
@@ -46,20 +48,47 @@ source venv/bin/activate  # Linux/Mac
 venv\Scripts\activate     # Windows
 
 # Instalar dependências
-pip install pandas openpyxl networkx
+pip install -r requirements.txt
 ```
 
 ### Executar
 
 ```bash
-# Com caminho padrão (WSL)
+# Básico: apenas gerar CSVs e GEXF
 python criar_multigrafo_recife.py
 
 # Com caminho customizado
 python criar_multigrafo_recife.py --excel_path /caminho/para/arquivo.xlsx
+
+# Gerar visualização HTML interativa
+python criar_multigrafo_recife.py --viz
+
+# Gerar HTML e abrir em servidor local (http://127.0.0.1:8000)
+python criar_multigrafo_recife.py --viz --serve
+
+# Customizar porta do servidor
+python criar_multigrafo_recife.py --viz --serve --port 8080
 ```
 
-## Visualização no Gephi
+## Visualização
+
+### HTML Interativo (PyVis)
+
+A visualização HTML interativa oferece:
+- Grafo interativo com física de força (arraste nós, zoom, pan)
+- Tamanho dos nós proporcional ao grau (calculado via pandas)
+- Hover sobre nós mostra: nome do bairro + grau
+- Hover sobre arestas mostra: nome da via + distância
+- Renderizado com vis.js
+
+Para gerar e visualizar:
+```bash
+python criar_multigrafo_recife.py --viz --serve
+```
+
+Depois abra: http://127.0.0.1:8000/grafo_interativo.html
+
+### Gephi
 
 1. Abrir Gephi
 2. Arquivo → Abrir → Selecionar `out/grafo_recife.gexf`
@@ -76,7 +105,14 @@ grafo-recife-teste/
 ├── out/                          # Arquivos gerados
 │   ├── edges.csv
 │   ├── nodes.csv
-│   └── grafo_recife.gexf
+│   ├── grafo_recife.gexf
+│   └── grafo_interativo.html    # Visualização HTML (com --viz)
+├── lib/                          # Bibliotecas JS para visualização
+│   ├── vis-9.1.2/
+│   ├── tom-select/
+│   └── bindings/
+├── requirements.txt
+├── .gitignore
 └── README.md
 ```
 
@@ -96,6 +132,12 @@ Esperado um arquivo Excel com as seguintes colunas:
 - Não soma pesos de arestas paralelas
 - Preserva NaN em pesos (com fallback weight=1.0)
 - Lança erro se vértices vazios
+
+## Notas sobre Implementação
+
+- **Cálculo de graus:** usa pandas (não networkx) conforme regras do projeto
+- **Visualização:** usa PyVis (não usa algoritmos prontos de libs externas)
+- **Multigrafo:** preserva todas as arestas paralelas e auto-laços
 
 ## Autor
 
