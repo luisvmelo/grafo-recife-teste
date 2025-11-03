@@ -2,13 +2,13 @@
 """
 App Streamlit minimalista para grafo de vias de Recife.
 UI: apenas canvas grande + sidebar com Bairro 1, Bairro 2, Método.
-Algoritmos: Dijkstra, BFS/DFS, Ranking por grau (implementações manuais).
+Algoritmos: Dijkstra, Kruskal, Ranking por grau (implementações manuais).
 """
 
 import streamlit as st
 import pandas as pd
 import os
-from collections import defaultdict, deque
+from collections import defaultdict
 import heapq
 
 try:
@@ -18,23 +18,29 @@ except ImportError:
 
 
 # ============================================================================
-# UNION-FIND (para Kruskal, se necessário no futuro)
+# UNION-FIND (para Kruskal)
+# Referência: AULA 12 - AMG_KRUSKAL
 # ============================================================================
 
 class UnionFind:
+    """Union-Find com path compression e union by rank"""
     def __init__(self, nodes):
         self.parent = {n: n for n in nodes}
         self.rank = {n: 0 for n in nodes}
 
     def find(self, x):
+        """Encontra raiz com path compression"""
         if self.parent[x] != x:
             self.parent[x] = self.find(self.parent[x])
         return self.parent[x]
 
     def union(self, x, y):
+        """Une dois conjuntos. Retorna True se uniu, False se já estavam unidos."""
         root_x, root_y = self.find(x), self.find(y)
         if root_x == root_y:
-            return False
+            return False  # já estão no mesmo conjunto (evita ciclo)
+
+        # union by rank
         if self.rank[root_x] < self.rank[root_y]:
             self.parent[root_x] = root_y
         elif self.rank[root_x] > self.rank[root_y]:
@@ -101,59 +107,44 @@ def dijkstra(adj, s, t, nodes):
 
 
 # ============================================================================
-# BFS - Busca em Largura (Árvore de travessia)
+# KRUSKAL - Árvore Geradora Mínima
+# Referência: AULA 11/12 - AMG_KRUSKAL
 # ============================================================================
 
-def bfs_tree(adj, raiz, nodes):
+def kruskal(edges_list, nodes):
     """
-    BFS manual a partir de raiz.
-    Retorna: (ordem_visita, arestas_arvore)
-    arestas_arvore = [(u, v, peso, nome, edge_id), ...]
+    Kruskal manual: ordena arestas + Union-Find.
+
+    Args:
+        edges_list: [(peso, edge_id, u, v, nome), ...]
+        nodes: lista de todos os nós
+
+    Returns:
+        (custo_total, agm_arestas)
+        agm_arestas = [(u, v, peso, nome, edge_id), ...]
     """
-    visitado = {n: False for n in nodes}
-    ordem = []
-    arestas_arvore = []
-    fila = deque([raiz])
-    visitado[raiz] = True
+    # 1. Criar floresta (Union-Find)
+    uf = UnionFind(nodes)
 
-    while fila:
-        u = fila.popleft()
-        ordem.append(u)
+    # 2. Ordenar arestas por peso crescente
+    edges_sorted = sorted(edges_list, key=lambda e: e[0])
 
-        if u in adj:
-            for v, peso, edge_id, nome in adj[u]:
-                if not visitado[v]:
-                    visitado[v] = True
-                    fila.append(v)
-                    arestas_arvore.append((u, v, peso, nome, edge_id))
+    # 3. Processar arestas em ordem
+    agm_arestas = []
+    custo_total = 0.0
 
-    return (ordem, arestas_arvore)
+    for peso, edge_id, u, v, nome in edges_sorted:
+        # Tenta unir u e v
+        if uf.union(u, v):
+            # Estavam em componentes diferentes → adiciona à AGM
+            agm_arestas.append((u, v, peso, nome, edge_id))
+            custo_total += peso
 
+            # Quando tiver |V|-1 arestas, AGM completa
+            if len(agm_arestas) == len(nodes) - 1:
+                break
 
-# ============================================================================
-# DFS - Busca em Profundidade (Árvore de travessia)
-# ============================================================================
-
-def dfs_tree(adj, raiz, nodes):
-    """
-    DFS manual a partir de raiz.
-    Retorna: (ordem_visita, arestas_arvore)
-    """
-    visitado = {n: False for n in nodes}
-    ordem = []
-    arestas_arvore = []
-
-    def dfs_visit(u):
-        visitado[u] = True
-        ordem.append(u)
-        if u in adj:
-            for v, peso, edge_id, nome in adj[u]:
-                if not visitado[v]:
-                    arestas_arvore.append((u, v, peso, nome, edge_id))
-                    dfs_visit(v)
-
-    dfs_visit(raiz)
-    return (ordem, arestas_arvore)
+    return (custo_total, agm_arestas)
 
 
 # ============================================================================
@@ -167,14 +158,14 @@ def carregar_dados():
     nodes_path = 'out/nodes.csv'
 
     if not os.path.exists(edges_path) or not os.path.exists(nodes_path):
-        return None, None, None, None
+        return None, None, None, None, None
 
     df_edges = pd.read_csv(edges_path)
     df_nodes = pd.read_csv(nodes_path)
 
     nodes = sorted(df_nodes['node'].tolist())
 
-    # Adjacência para algoritmos: adj[u] = [(v, peso, edge_id, nome), ...]
+    # Adjacência para Dijkstra: adj[u] = [(v, peso, edge_id, nome), ...]
     adj = defaultdict(list)
     for _, row in df_edges.iterrows():
         u, v = row['source'], row['target']
@@ -184,13 +175,25 @@ def carregar_dados():
         adj[u].append((v, peso, edge_id, nome))
         adj[v].append((u, peso, edge_id, nome))
 
+    # Lista de arestas para Kruskal: (peso, edge_id, u, v, nome)
+    edges_list = []
+    for _, row in df_edges.iterrows():
+        peso = row['weight'] if pd.notna(row['weight']) else 1.0
+        edges_list.append((
+            peso,
+            row['edge_id'],
+            row['source'],
+            row['target'],
+            row.get('nome_logradouro', '')
+        ))
+
     # Degree (contagem manual)
     degree = defaultdict(int)
     for _, row in df_edges.iterrows():
         degree[row['source']] += 1
         degree[row['target']] += 1
 
-    return df_edges, nodes, adj, degree
+    return df_edges, nodes, adj, degree, edges_list
 
 
 # ============================================================================
@@ -228,7 +231,7 @@ def criar_grafo_visual(df_edges, nodes, degree, resultado=None, metodo=None):
     Cria visualização do grafo com PyVis.
 
     Base: todas as 904 arestas visíveis, iguais (cinza claro, sem label).
-    Destaque: conforme método (Dijkstra, BFS/DFS, Ranking).
+    Destaque: conforme método (Dijkstra, Kruskal, Ranking).
     """
     global pair_idx
     pair_idx = defaultdict(int)  # reset
@@ -238,47 +241,50 @@ def criar_grafo_visual(df_edges, nodes, degree, resultado=None, metodo=None):
 
     net = Network(height="1000px", width="100%", directed=False, bgcolor="#ffffff")
 
-    # Opções conforme especificação
-    net.set_options("""{
-  "layout": { "improvedLayout": true },
-  "nodes": {
-    "shape": "dot",
-    "size": 12,
-    "font": { "face": "Arial", "size": 20, "bold": false, "vadjust": 0 },
-    "scaling": { "min": 20, "max": 20, "label": { "enabled": true, "min": 20, "max": 20 } },
-    "labelHighlightBold": false
+    # Opções conforme especificação (physics.enabled = false)
+    net.set_options("""
+var options = {
+  layout: { improvedLayout: true },
+  nodes: {
+    shape: 'dot',
+    size: 12,
+    font: { face: 'Arial', size: 20, bold: false, vadjust: 0 },
+    scaling: { min: 20, max: 20, label: { enabled: true, min: 20, max: 20 } },
+    labelHighlightBold: false
   },
-  "edges": {
-    "smooth": false,
-    "color": { "color": "#94a3b8", "opacity": 0.45 },
-    "width": 1.2
+  edges: {
+    smooth: false,
+    color: { color:'#94a3b8', opacity:0.45 },
+    width: 1.2
   },
-  "physics": {
-    "solver": "repulsion",
-    "repulsion": { "nodeDistance": 340, "springLength": 320 },
-    "stabilization": { "iterations": 450 }
+  physics: {
+    enabled: false,
+    solver: 'repulsion',
+    repulsion: { nodeDistance: 340, springLength: 320 },
+    stabilization: { iterations: 450 }
   },
-  "interaction": {
-    "hover": true,
-    "hoverConnectedEdges": true,
-    "selectConnectedEdges": true,
-    "zoomView": true,
-    "navigationButtons": true,
-    "keyboard": true,
-    "tooltipDelay": 60
+  interaction: {
+    hover: true,
+    hoverConnectedEdges: true,
+    selectConnectedEdges: true,
+    zoomView: true,
+    navigationButtons: true,
+    keyboard: true,
+    tooltipDelay: 60
   }
-}""")
+}
+""")
 
     # Preparar conjunto de arestas destacadas
     arestas_destaque = set()
-    if resultado is not None and metodo in ['dijkstra', 'bfs', 'dfs']:
+    if resultado is not None and metodo in ['dijkstra', 'kruskal']:
         if metodo == 'dijkstra':
             _, _, caminho_arestas = resultado
             for _, _, _, _, edge_id in caminho_arestas:
                 arestas_destaque.add(edge_id)
-        elif metodo in ['bfs', 'dfs']:
-            _, arestas_arvore = resultado
-            for _, _, _, _, edge_id in arestas_arvore:
+        elif metodo == 'kruskal':
+            _, agm_arestas = resultado
+            for _, _, _, _, edge_id in agm_arestas:
                 arestas_destaque.add(edge_id)
 
     # Adicionar nós
@@ -291,7 +297,6 @@ def criar_grafo_visual(df_edges, nodes, degree, resultado=None, metodo=None):
             # Tamanho proporcional ao grau
             size = 20 + (deg - min_deg) / (max_deg - min_deg + 1) * 30
             # Cor gradiente azul (claro → escuro)
-            # Usar RGB: azul claro (173, 216, 230) → azul escuro (0, 0, 139)
             ratio = (deg - min_deg) / (max_deg - min_deg + 1)
             r = int(173 * (1 - ratio) + 0 * ratio)
             g = int(216 * (1 - ratio) + 0 * ratio)
@@ -326,9 +331,6 @@ def criar_grafo_visual(df_edges, nodes, degree, resultado=None, metodo=None):
             # Base: cinza, sem label
             add_edge_curved(net, u, v, title=tooltip, highlight=False, label=None)
 
-    # Desligar física após estabilização para manter layout estático
-    net.toggle_physics(False)
-
     return net
 
 
@@ -340,11 +342,12 @@ def main():
     st.set_page_config(layout="wide", page_title="Grafo de Vias")
 
     # Carregar dados
-    df_edges, nodes, adj, degree = carregar_dados()
-
-    if df_edges is None:
+    data = carregar_dados()
+    if data[0] is None:
         st.error("❌ Arquivos não encontrados. Execute `python criar_multigrafo_recife.py` primeiro.")
         return
+
+    df_edges, nodes, adj, degree, edges_list = data
 
     # ========== SIDEBAR ==========
     with st.sidebar:
@@ -355,7 +358,7 @@ def main():
 
         metodo = st.selectbox(
             "Método de travessia:",
-            ["Dijkstra (menor caminho)", "Árvores de travessia (BFS/DFS)", "Ranking por grau (bairros)"]
+            ["Viz base (nenhum)", "Dijkstra (menor caminho)", "AGM (Kruskal)", "Ranking por grau (bairros)"]
         )
 
         executar = st.button("🔍 Executar", type="primary", use_container_width=True)
@@ -363,7 +366,6 @@ def main():
     # ========== PROCESSAMENTO ==========
     resultado = None
     metodo_id = None
-    mensagem = None
 
     if executar:
         if metodo == "Dijkstra (menor caminho)":
@@ -386,33 +388,26 @@ def main():
                     for u, v, peso, nome, _ in caminho_arestas:
                         st.sidebar.write(f"- {nome} ({int(peso)} m)")
 
-        elif metodo == "Árvores de travessia (BFS/DFS)":
-            if not bairro1:
-                st.sidebar.error("❌ Selecione Bairro 1 como raiz")
-            else:
-                # Escolher BFS ou DFS (pode adicionar um sub-select ou alternar)
-                # Por simplicidade, vamos usar BFS. Se quiser escolha, adicione outro selectbox
-                escolha_busca = st.sidebar.radio("Tipo de busca:", ["BFS (Largura)", "DFS (Profundidade)"])
+        elif metodo == "AGM (Kruskal)":
+            metodo_id = 'kruskal'
+            custo_total, agm_arestas = kruskal(edges_list, nodes)
+            resultado = (custo_total, agm_arestas)
 
-                if escolha_busca == "BFS (Largura)":
-                    metodo_id = 'bfs'
-                    ordem, arestas_arvore = bfs_tree(adj, bairro1, nodes)
-                else:
-                    metodo_id = 'dfs'
-                    ordem, arestas_arvore = dfs_tree(adj, bairro1, nodes)
+            st.sidebar.success(f"✓ AGM construída! Custo total: **{custo_total:.2f} m**")
+            st.sidebar.info(f"Arestas na AGM: **{len(agm_arestas)}** (esperado: {len(nodes)-1} = |V|-1)")
 
-                resultado = (ordem, arestas_arvore)
+            st.sidebar.markdown("**Arestas da AGM (primeiras 20):**")
+            for u, v, peso, nome, _ in agm_arestas[:20]:
+                st.sidebar.write(f"- {u} ↔ {v}: {nome} ({int(peso)} m)")
 
-                st.sidebar.success(f"✓ Árvore de travessia ({escolha_busca}) a partir de **{bairro1}**")
-                st.sidebar.markdown(f"**Nós visitados:** {len(ordem)}")
-                st.sidebar.markdown("**Ordem de visita:**")
-                st.sidebar.write(", ".join(ordem[:20]) + ("..." if len(ordem) > 20 else ""))
+            if len(agm_arestas) > 20:
+                st.sidebar.write(f"... e mais {len(agm_arestas) - 20} arestas")
 
         elif metodo == "Ranking por grau (bairros)":
             metodo_id = 'ranking'
             # Ordenar nós por grau decrescente
             ranking = sorted(degree.items(), key=lambda x: x[1], reverse=True)
-            resultado = ranking  # apenas para sinalizar que tem resultado
+            resultado = ranking
 
             st.sidebar.success("✓ Ranking por grau")
             st.sidebar.markdown("**Top 20 bairros por grau:**")
