@@ -169,7 +169,7 @@ def _grau_por_pandas(df_edges):
     grau = (s.add(t, fill_value=0)).astype(int)
     return grau.to_dict()
 
-def visualizar_pyvis(df_edges, output_dir='./out', html_name='grafo_interativo.html', serve=False, port=8000):
+def visualizar_pyvis(G, df_edges, output_dir='./out', html_name='grafo_interativo.html', serve=False, port=8000):
     """
     Gera HTML interativo via PyVis a partir do df_edges (sem usar networkx para algoritmos).
     """
@@ -180,29 +180,79 @@ def visualizar_pyvis(df_edges, output_dir='./out', html_name='grafo_interativo.h
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     html_path = os.path.join(output_dir, html_name)
 
-    # calcular grau via pandas (conforme regras do projeto)
-    graus = _grau_por_pandas(df_edges)
-
-    # nós = união de sources e targets
-    nos = sorted(set(df_edges['source']).union(set(df_edges['target'])))
+    print(f"[viz] nós a adicionar no PyVis: {len(G.nodes())}")
 
     net = Network(height="850px", width="100%", directed=False, bgcolor="#ffffff")
-    net.barnes_hut()  # física para espalhar
+
+    net.set_options("""{
+  "nodes": {
+    "borderWidth": 1,
+    "shape": "dot"
+  },
+  "edges": {
+    "smooth": false,
+    "color": { "opacity": 0.7 }
+  },
+  "physics": {
+    "solver": "repulsion",
+    "repulsion": {
+      "nodeDistance": 220,
+      "springLength": 220
+    },
+    "stabilization": { "iterations": 200 }
+  }
+}""")
 
     # adicionar nós com label e tamanho por grau
-    for n in nos:
-        g = int(graus.get(n, 0))
-        size = 8 + 3 * (g ** 0.8)
-        net.add_node(n, label=str(n), title=f"{n}\nGrau: {g}", value=g, size=size)
+    for n, data in G.nodes(data=True):
+        lbl = data.get('label', str(n))
+        deg = int(data.get('degree', 0))
+        # nós maiores: base/escala mais fortes
+        size = 14 + 6 * (deg ** 0.85)   # antes era pequeno; aumente base e escala
+        net.add_node(
+            n,
+            label=lbl,
+            title=f"{lbl}\\nGrau: {deg}",
+            value=deg,
+            size=size
+        )
 
-    # adicionar arestas com label/weight se existirem no df_edges
-    for _, e in df_edges.iterrows():
-        u, v = e['source'], e['target']
-        title = e.get('label', '')
-        weight = e.get('weight', 1.0)
-        net.add_edge(u, v, title=title if isinstance(title, str) else '',
-                     label=title if isinstance(title, str) and title else None,
-                     value=(float(weight) if pd.notna(weight) else 1.0))
+    # adicionar arestas com curvatura por par
+    from collections import defaultdict
+
+    pair_idx = defaultdict(int)  # índice por par não dirigido
+    added = 0
+
+    for u, v, edata in G.edges(data=True):
+        title = edata.get('label', '')
+        weight = edata.get('weight', 1.0)
+
+        # normaliza o par (não dirigido)
+        a, b = (u, v) if str(u) <= str(v) else (v, u)
+        i = pair_idx[(a, b)]
+        pair_idx[(a, b)] += 1
+
+        # alterna sentido e aumenta curvatura conforme multiplicidade
+        sign = 1 if (i % 2 == 0) else -1
+        step = (i // 2)
+        roundness = 0.18 + 0.06 * step   # 0.18, 0.24, 0.30, ...
+
+        smooth = {
+            "enabled": True,
+            "type": "curvedCW" if sign > 0 else "curvedCCW",
+            "roundness": roundness
+        }
+
+        net.add_edge(
+            u, v,
+            title=title if isinstance(title, str) else '',
+            label=title if (isinstance(title, str) and title) else None,
+            value=(float(weight) if weight is not None else 1.0),
+            smooth=smooth
+        )
+        added += 1
+
+    print(f"[viz] arestas adicionadas no PyVis: {added}")
 
     net.write_html(html_path, open_browser=False, notebook=False)
     print(f"✓ Visualização HTML: {html_path}")
@@ -254,12 +304,14 @@ def main():
     # Criar multigrafo
     G, df_edges = criar_multigrafo(args.excel_path)
 
+    print(f"[check] nós G: {G.number_of_nodes()}  arestas G: {G.number_of_edges()}")
+
     # Exportar arquivos
     exportar_arquivos(G, df_edges)
 
     # Visualização interativa (opcional; usa df_edges e pandas, sem algoritmos prontos)
     if args.viz:
-        visualizar_pyvis(df_edges, output_dir='./out', html_name='grafo_interativo.html', serve=args.serve, port=args.port)
+        visualizar_pyvis(G, df_edges, output_dir='./out', html_name='grafo_interativo.html', serve=args.serve, port=args.port)
 
     print()
     print("="*60)
