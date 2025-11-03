@@ -10,6 +10,15 @@ import pandas as pd
 import networkx as nx
 from pathlib import Path
 
+try:
+    from pyvis.network import Network
+except Exception:
+    Network = None
+
+import webbrowser
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+import threading
+
 
 def validar_linha(row, idx):
     """Valida se a linha tem vértices válidos. Lança erro se vazio."""
@@ -153,6 +162,69 @@ def exportar_arquivos(G, df_edges, output_dir='./out'):
     print(f"✓ Exportado: {gexf_path}")
 
 
+def _grau_por_pandas(df_edges):
+    # grau não-dirigido em multigrafo: conta aparições em source e target
+    s = df_edges['source'].value_counts()
+    t = df_edges['target'].value_counts()
+    grau = (s.add(t, fill_value=0)).astype(int)
+    return grau.to_dict()
+
+def visualizar_pyvis(df_edges, output_dir='./out', html_name='grafo_interativo.html', serve=False, port=8000):
+    """
+    Gera HTML interativo via PyVis a partir do df_edges (sem usar networkx para algoritmos).
+    """
+    if Network is None:
+        print("⚠ Visualização indisponível: instale o PyVis -> pip install pyvis")
+        return
+
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    html_path = os.path.join(output_dir, html_name)
+
+    # calcular grau via pandas (conforme regras do projeto)
+    graus = _grau_por_pandas(df_edges)
+
+    # nós = união de sources e targets
+    nos = sorted(set(df_edges['source']).union(set(df_edges['target'])))
+
+    net = Network(height="850px", width="100%", directed=False, bgcolor="#ffffff")
+    net.barnes_hut()  # física para espalhar
+
+    # adicionar nós com label e tamanho por grau
+    for n in nos:
+        g = int(graus.get(n, 0))
+        size = 8 + 3 * (g ** 0.8)
+        net.add_node(n, label=str(n), title=f"{n}\nGrau: {g}", value=g, size=size)
+
+    # adicionar arestas com label/weight se existirem no df_edges
+    for _, e in df_edges.iterrows():
+        u, v = e['source'], e['target']
+        title = e.get('label', '')
+        weight = e.get('weight', 1.0)
+        net.add_edge(u, v, title=title if isinstance(title, str) else '',
+                     label=title if isinstance(title, str) and title else None,
+                     value=(float(weight) if pd.notna(weight) else 1.0))
+
+    net.write_html(html_path, open_browser=False, notebook=False)
+    print(f"✓ Visualização HTML: {html_path}")
+
+    if serve:
+        class QuietHandler(SimpleHTTPRequestHandler):
+            def log_message(self, *args, **kwargs):
+                pass
+        cwd = os.getcwd()
+        os.chdir(output_dir)
+        httpd = HTTPServer(("127.0.0.1", port), QuietHandler)
+        url = f"http://127.0.0.1:{port}/{html_name}"
+        print(f"▶ Servindo em {url}")
+        webbrowser.open(url)
+        def _serve():
+            try:
+                httpd.serve_forever()
+            finally:
+                os.chdir(cwd)
+        threading.Thread(target=_serve, daemon=True).start()
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Cria multigrafo não direcionado fiel aos dados do Excel (sem deduplicação)'
@@ -163,6 +235,9 @@ def main():
         default='/mnt/c/Users/luise/Downloads/Todas as vias FINAL (1).xlsx',
         help='Caminho para o arquivo Excel (padrão: caminho WSL do arquivo do usuário)'
     )
+    parser.add_argument('--viz', action='store_true', help='Gera visualização HTML interativa (PyVis) em out/')
+    parser.add_argument('--serve', action='store_true', help='Sobe um servidor local para visualizar o HTML')
+    parser.add_argument('--port', type=int, default=8000, help='Porta do servidor local (default: 8000)')
 
     args = parser.parse_args()
 
@@ -181,6 +256,10 @@ def main():
 
     # Exportar arquivos
     exportar_arquivos(G, df_edges)
+
+    # Visualização interativa (opcional; usa df_edges e pandas, sem algoritmos prontos)
+    if args.viz:
+        visualizar_pyvis(df_edges, output_dir='./out', html_name='grafo_interativo.html', serve=args.serve, port=args.port)
 
     print()
     print("="*60)
