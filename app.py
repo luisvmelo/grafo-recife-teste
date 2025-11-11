@@ -17,6 +17,9 @@ try:
 except ImportError:
     Network = None
 
+# Caminho do arquivo Excel (dentro do projeto)
+EXCEL_PATH = "Todas as vias FINAL (2).xlsx"
+
 
 # ============================================================================
 # UNION-FIND (para Kruskal)
@@ -151,6 +154,20 @@ def kruskal(edges_list, nodes):
 # ============================================================================
 # CARREGAR DADOS
 # ============================================================================
+
+@st.cache_data
+def carregar_excel():
+    """Carrega dados do arquivo Excel"""
+    if not os.path.exists(EXCEL_PATH):
+        return None
+
+    try:
+        df_excel = pd.read_excel(EXCEL_PATH)
+        return df_excel
+    except Exception as e:
+        st.error(f"Erro ao carregar Excel: {e}")
+        return None
+
 
 @st.cache_data
 def carregar_dados():
@@ -351,6 +368,20 @@ def main():
     # ========== SIDEBAR ==========
     with st.sidebar:
         st.header("⚙️ Configurações")
+
+        # Seção de dados do Excel
+        st.subheader("📊 Dados Excel")
+        df_excel = carregar_excel()
+        if df_excel is not None:
+            st.success(f"✓ Excel carregado: {len(df_excel)} linhas")
+            if st.checkbox("Visualizar dados do Excel"):
+                st.dataframe(df_excel.head(10), use_container_width=True)
+                st.info(f"Colunas: {', '.join(df_excel.columns.tolist())}")
+        else:
+            st.warning("⚠ Arquivo Excel não encontrado")
+            st.caption(f"Caminho: {EXCEL_PATH}")
+
+        st.divider()
 
         bairro1 = st.selectbox("Bairro 1:", options=[""] + nodes, index=0)
         bairro2 = st.selectbox("Bairro 2:", options=[""] + nodes, index=0)
